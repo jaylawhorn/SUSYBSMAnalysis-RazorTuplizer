@@ -1,34 +1,35 @@
 import FWCore.ParameterSet.Config as cms
 
-#------ Setup ------#                                                                                                                               
+#------ Setup ------#
 
-#initialize the process                                                                                                                             
+#initialize the process
 process = cms.Process("razorTuplizer")
 process.load("FWCore.MessageService.MessageLogger_cfi")
 process.load("PhysicsTools.PatAlgos.producersLayer1.patCandidates_cff")
 process.load("Configuration.EventContent.EventContent_cff")
 
-#load input files                                                                                                                                   
+#load input files
 process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring(
-        '/store/mc/RunIISpring15DR74/DYJetsToLL_M-50_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/AODSIM/Asympt25ns_MCRUN2_74_V9-v3/70001/60962869-5815-E511-BA9E-02163E014297.root'
+        #'/store/mc/RunIISpring15DR74/DYJetsToLL_M-50_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/AODSIM/Asympt25ns_MCRUN2_74_V9-v3/70001/60962869-5815-E511-BA9E-02163E014297.root'
+        'file:60962869-5815-E511-BA9E-02163E014297.root'
         )
                             )
 
 process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(10) )
 process.MessageLogger.cerr.FwkReport.reportEvery = 100
 
-#TFileService for output                                                                                                                            
+#TFileService for output
 process.TFileService = cms.Service("TFileService",
     fileName = cms.string("file:test.root")
 )
 
-#load run conditions                                                                                                                                
+#load run conditions
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 process.load('Configuration.Geometry.GeometryIdeal_cff')
 process.load('Configuration.StandardSequences.MagneticField_38T_cff')
 
-#global tag for PHYS14 asymptotic 25ns scenario                                                                                                     
+#global tag for PHYS14 asymptotic 25ns scenario
 process.GlobalTag.globaltag = 'MCRUN2_74_V9::All'
 
 from RecoMET.METProducers.PFMET_cfi import pfMet
@@ -41,7 +42,7 @@ process.pfMet30.src                  = cms.InputTag('packedPFCandidates30')
 process.ntuples = cms.EDAnalyzer('RazorTuplizer',
                                  isData = cms.bool(False),
                                  useGen = cms.bool(True),
-                                 enableTriggerInfo = cms.bool(True),
+                                 enableTriggerInfo = cms.bool(False),
 
                                  triggerPathNamesFile = cms.string("SUSYBSMAnalysis/RazorTuplizer/data/RazorHLTPathnames.dat"),
                                  eleHLTFilterNamesFile = cms.string("SUSYBSMAnalysis/RazorTuplizer/data/RazorElectronHLTFilterNames.dat"),
@@ -67,7 +68,7 @@ process.ntuples = cms.EDAnalyzer('RazorTuplizer',
 
                                  genParticles = cms.InputTag("genParticles"),
                                  genJets = cms.InputTag("ak4GenJets"),
-                                 
+
                                  lheInfo = cms.InputTag("externalLHEProducer", "", "LHE"),
                                  genInfo = cms.InputTag("generator", "", "SIM"),
                                  puInfo = cms.InputTag("addPileupInfo", "", "HLT"), #uncomment if no pre-mixing

@@ -1,15 +1,15 @@
-// -*- C++ -*-                                                                                                                                      
-// Class:      RazorTuplizer                                                                                                                        
-/*                                                                                                                                                  
-Description: Base class for miniAOD analysis with CRAB                                                                                              
+// -*- C++ -*-
+// Class:      RazorTuplizer
+/*
+Description: Base class for miniAOD analysis with CRAB
 */
-//         Author:  Caltech razor team                                                                                                              
-//         Created:  Thu, 17 Jul 2014 15:00:06 GMT                                                                                                  
+//         Author:  Caltech razor team
+//         Created:  Thu, 17 Jul 2014 15:00:06 GMT
 
 #ifndef RAZORTUPLIZER_H
 #define RAZORTUPLIZER_H
 
-// system include files                                                                                                                             
+// system include files
 #include <memory>
 #include <string>
 #include <vector>
@@ -17,7 +17,7 @@ Description: Base class for miniAOD analysis with CRAB
 
 using namespace std;
 
-// CMSSW framework includes                                                                                                                         
+// CMSSW framework includes
 #include "FWCore/Framework/interface/Frameworkfwd.h"
 #include "FWCore/Framework/interface/EDAnalyzer.h"
 #include "FWCore/Framework/interface/Event.h"
@@ -26,7 +26,7 @@ using namespace std;
 #include "FWCore/ServiceRegistry/interface/Service.h"
 #include "CommonTools/UtilAlgos/interface/TFileService.h"
 
-//CMSSW package includes                                                                                                                            
+//CMSSW package includes
 #include "DataFormats/ParticleFlowCandidate/interface/PFCandidateFwd.h"
 #include "DataFormats/VertexReco/interface/VertexFwd.h"
 #include "DataFormats/VertexReco/interface/Vertex.h"
@@ -67,17 +67,17 @@ using namespace std;
 #include "TFile.h"
 #include "TLorentzVector.h"
 
-//------ Array Size Constants ------//                                                                                                              
+//------ Array Size Constants ------//
 #define OBJECTARRAYSIZE 99
 #define GENPARTICLEARRAYSIZE 500
 
 class RazorTuplizer : public edm::EDAnalyzer {
  public:
-  //analyzer constructor and destructor                                                                                                             
+  //analyzer constructor and destructor
   explicit RazorTuplizer(const edm::ParameterSet&);
   ~RazorTuplizer();
 
-  void loadEvent(const edm::Event& iEvent); //call at the beginning of each event to get input handles from the python config                       
+  void loadEvent(const edm::Event& iEvent); //call at the beginning of each event to get input handles from the python config
   virtual void resetBranches();
 
   //enable desired output variables
@@ -96,7 +96,7 @@ class RazorTuplizer : public edm::EDAnalyzer {
   virtual void enableMCBranches();
   virtual void enableGenParticleBranches();
 
-  //select objects and fill tree branches                                                                                                           
+  //select objects and fill tree branches
   virtual bool fillEventInfo(const edm::Event& iEvent);
   virtual bool fillPileUp();//Fill summary PU info
   virtual bool fillMuons();//Fills looseID muon 4-momentum only. PT > 5GeV
@@ -116,7 +116,7 @@ class RazorTuplizer : public edm::EDAnalyzer {
   virtual void analyze(const edm::Event&, const edm::EventSetup&) override;
   virtual void endJob() override;
 
-  //MVAs for triggering and non-triggering electron ID                                                                                                  
+  //MVAs for triggering and non-triggering electron ID
   EGammaMvaEleEstimatorCSA14* myMVATrig;
   ElectronMVAEstimatorRun2NonTrig* myMVANonTrig;
   EGammaMvaPhotonEstimator* myPhotonMVA;
@@ -226,16 +226,16 @@ class RazorTuplizer : public edm::EDAnalyzer {
   float muonPt[OBJECTARRAYSIZE];
   float muonEta[OBJECTARRAYSIZE];
   float muonPhi[OBJECTARRAYSIZE];
-  int muonCharge[OBJECTARRAYSIZE];//muon charge                                                                                                     
+  int muonCharge[OBJECTARRAYSIZE];//muon charge
   bool muonIsLoose[OBJECTARRAYSIZE];
   bool muonIsMedium[OBJECTARRAYSIZE];
   bool muonIsTight[OBJECTARRAYSIZE];
-  float muon_d0[OBJECTARRAYSIZE];//transverse impact paramenter                                                                                     
-  float muon_dZ[OBJECTARRAYSIZE];//impact parameter                                                                                                 
-  float muon_ip3d[OBJECTARRAYSIZE];//3d impact paramenter                                                                                           
-  float muon_ip3dSignificance[OBJECTARRAYSIZE];//3d impact paramenter/error                                                                         
-  unsigned int muonType[OBJECTARRAYSIZE];//muonTypeBit: global, tracker, standalone                                                                 
-  unsigned int muonQuality[OBJECTARRAYSIZE];//muonID Quality Bits                                                                                   
+  float muon_d0[OBJECTARRAYSIZE];//transverse impact paramenter
+  float muon_dZ[OBJECTARRAYSIZE];//impact parameter
+  float muon_ip3d[OBJECTARRAYSIZE];//3d impact paramenter
+  float muon_ip3dSignificance[OBJECTARRAYSIZE];//3d impact paramenter/error
+  unsigned int muonType[OBJECTARRAYSIZE];//muonTypeBit: global, tracker, standalone
+  unsigned int muonQuality[OBJECTARRAYSIZE];//muonID Quality Bits
   float muon_pileupIso[OBJECTARRAYSIZE];
   float muon_chargedIso[OBJECTARRAYSIZE];
   float muon_photonIso[OBJECTARRAYSIZE];
@@ -246,7 +246,7 @@ class RazorTuplizer : public edm::EDAnalyzer {
   float muon_chargedPileupMiniIso[OBJECTARRAYSIZE];
   float muon_activityMiniIsoAnnulus[OBJECTARRAYSIZE];
   bool  muon_passSingleMuTagFilter[OBJECTARRAYSIZE];
-  //bool  muon_passHLTFilter[OBJECTARRAYSIZE][MAX_MuonHLTFilters];
+  bool  muon_passHLTFilter[OBJECTARRAYSIZE][MAX_MuonHLTFilters];
 
   //Electrons
   int nElectrons;
@@ -290,9 +290,9 @@ class RazorTuplizer : public edm::EDAnalyzer {
   bool ele_passTPTwoTagFilter[OBJECTARRAYSIZE];
   bool ele_passTPOneProbeFilter[OBJECTARRAYSIZE];
   bool ele_passTPTwoProbeFilter[OBJECTARRAYSIZE];
-  //bool ele_passHLTFilter[OBJECTARRAYSIZE][MAX_ElectronHLTFilters];
+  bool ele_passHLTFilter[OBJECTARRAYSIZE][MAX_ElectronHLTFilters];
 
-  //Taus                                                                                                                                                
+  //Taus
   int nTaus;
   float tauE[OBJECTARRAYSIZE];
   float tauPt[OBJECTARRAYSIZE];
@@ -307,7 +307,7 @@ class RazorTuplizer : public edm::EDAnalyzer {
   bool tau_passMuVetoLoose[OBJECTARRAYSIZE];
   bool tau_passMuVetoMedium[OBJECTARRAYSIZE];
   bool tau_passMuVetoTight[OBJECTARRAYSIZE];
-  UInt_t tau_ID[OBJECTARRAYSIZE];//tauID Bits                                                                                                           
+  UInt_t tau_ID[OBJECTARRAYSIZE];//tauID Bits
   float tau_combinedIsoDeltaBetaCorr3Hits[OBJECTARRAYSIZE];
   float tau_chargedIsoPtSum[OBJECTARRAYSIZE];
   float tau_neutralIsoPtSum[OBJECTARRAYSIZE];
@@ -322,7 +322,7 @@ class RazorTuplizer : public edm::EDAnalyzer {
   float tau_leadChargedHadrCandPt[OBJECTARRAYSIZE];
   int tau_leadChargedHadrCandID[OBJECTARRAYSIZE];
 
-  //IsolatedChargedPFCandidates                                                                                                                         
+  //IsolatedChargedPFCandidates
   int nIsoPFCandidates;
   float isoPFCandidatePt[OBJECTARRAYSIZE];
   float isoPFCandidateEta[OBJECTARRAYSIZE];
@@ -353,7 +353,7 @@ class RazorTuplizer : public edm::EDAnalyzer {
   float pho_superClusterEta[OBJECTARRAYSIZE];
   float pho_superClusterPhi[OBJECTARRAYSIZE];
   bool pho_hasPixelSeed[OBJECTARRAYSIZE];
-  //bool pho_passHLTFilter[OBJECTARRAYSIZE][MAX_PhotonHLTFilters];
+  bool pho_passHLTFilter[OBJECTARRAYSIZE][MAX_PhotonHLTFilters];
 
   //AK4 Jets
   int nJets;
@@ -396,7 +396,7 @@ class RazorTuplizer : public edm::EDAnalyzer {
   float fatJetTau2[OBJECTARRAYSIZE];
   float fatJetTau3[OBJECTARRAYSIZE];
 
-  //MET                                                                                                                                                 
+  //MET
   float metPt;
   float metPhi;
   float sumMET;
