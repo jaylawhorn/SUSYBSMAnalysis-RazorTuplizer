@@ -31,16 +31,39 @@ process.load('Configuration.StandardSequences.MagneticField_38T_cff')
 #global tag for PHYS14 asymptotic 25ns scenario                                                                                                     
 process.GlobalTag.globaltag = 'MCRUN2_74_V9::All'
 
+from RecoMET.METProducers.PFMET_cfi import pfMet
+process.packedPFCandidates30 = cms.EDFilter("CandPtrSelector",
+                                            src = cms.InputTag("particleFlow"),
+                                            cut = cms.string("abs(eta) < 3.0"))
+process.pfMet30                      = pfMet.clone();
+process.pfMet30.src                  = cms.InputTag('packedPFCandidates30')
+
 process.ntuples = cms.EDAnalyzer('RazorTuplizer',
                                  isData = cms.bool(False),
                                  useGen = cms.bool(True),
+                                 enableTriggerInfo = cms.bool(True),
+
+                                 triggerPathNamesFile = cms.string("SUSYBSMAnalysis/RazorTuplizer/data/RazorHLTPathnames.dat"),
+                                 eleHLTFilterNamesFile = cms.string("SUSYBSMAnalysis/RazorTuplizer/data/RazorElectronHLTFilterNames.dat"),
+                                 muonHLTFilterNamesFile = cms.string("SUSYBSMAnalysis/RazorTuplizer/data/RazorMuonHLTFilterNames.dat"),
+                                 photonHLTFilterNamesFile = cms.string("SUSYBSMAnalysis/RazorTuplizer/data/RazorPhotonHLTFilterNames.dat"),
+
+                                 triggerBits = cms.InputTag("TriggerResults","","HLT"),
+                                 triggerEvent = cms.InputTag("hltTriggerSummaryAOD","","HLT"),
+
                                  vertices = cms.InputTag("offlinePrimaryVertices"),
                                  muons = cms.InputTag("muons"),
                                  electrons = cms.InputTag("gedGsfElectrons"),
+                                 taus = cms.InputTag("hpsPFTauProducer"),
                                  photons = cms.InputTag("gedPhotons"),
                                  jets = cms.InputTag("ak4PFJetsCHS"), # or not CHS?
                                  jetsPuppi = cms.InputTag("ak4PFJets"), # not PUPPI
                                  jetsAK8 = cms.InputTag("ak8PFJetsCHS"),# or not CHS?
+
+                                 mets = cms.InputTag("pfMet"),
+                                 metsNoHF = cms.InputTag("pfMet30"),
+                                 metsPuppi = cms.InputTag("pfMet"),
+                                 pfCands = cms.InputTag("PFCandidates"),
 
                                  genParticles = cms.InputTag("genParticles"),
                                  genJets = cms.InputTag("ak4GenJets"),
@@ -49,7 +72,17 @@ process.ntuples = cms.EDAnalyzer('RazorTuplizer',
                                  genInfo = cms.InputTag("generator", "", "SIM"),
                                  puInfo = cms.InputTag("addPileupInfo", "", "HLT"), #uncomment if no pre-mixing
                                  #puInfo = cms.InputTag("mixData", "", "HLT"), #uncomment for samples with pre-mixed pileup
+
+                                 rhoAll = cms.InputTag("fixedGridRhoAll", "", "RECO"),
+                                 rhoFastjetAll = cms.InputTag("fixedGridRhoFastjetAll", "", "RECO"),
+                                 rhoFastjetAllCalo = cms.InputTag("fixedGridRhoFastjetAllCalo", "", "RECO"),
+                                 rhoFastjetCentralCalo = cms.InputTag("fixedGridRhoFastjetCentralCalo", "", "RECO"),
+                                 rhoFastjetCentralChargedPileUp = cms.InputTag("fixedGridRhoFastjetCentralChargedPileUp", "", "RECO"),
+                                 rhoFastjetCentralNeutral = cms.InputTag("fixedGridRhoFastjetCentralNeutral", "", "RECO"),
+
                                  )
 
-process.p = cms.Path( #process.HBHENoiseFilterResultProducer*                                                                                       
-                      process.ntuples)
+process.p = cms.Path( #process.HBHENoiseFilterResultProducer*
+    process.packedPFCandidates30*
+    process.pfMet30*
+    process.ntuples)

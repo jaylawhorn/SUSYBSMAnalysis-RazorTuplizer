@@ -49,17 +49,18 @@ using namespace std;
 #include "DataFormats/JetReco/interface/PFJetCollection.h"
 #include "DataFormats/METReco/interface/PFMET.h"
 #include "DataFormats/METReco/interface/PFMETCollection.h"
-//#include "FWCore/Common/interface/TriggerNames.h"
-//#include "DataFormats/Common/interface/TriggerResults.h"
+#include "FWCore/Common/interface/TriggerNames.h"
+#include "DataFormats/Common/interface/TriggerResults.h"
+#include "DataFormats/HLTReco/interface/TriggerEvent.h"
 //#include "DataFormats/PatCandidates/interface/TriggerObjectStandAlone.h"
 //#include "DataFormats/PatCandidates/interface/PackedTriggerPrescales.h"
 //#include "DataFormats/METReco/interface/HcalNoiseSummary.h"
 //#include "DataFormats/Candidate/interface/VertexCompositePtrCandidate.h"
 //#include "RecoEgamma/EgammaTools/interface/ConversionTools.h"
-//#include "SUSYBSMAnalysis/RazorTuplizer/interface/EGammaMvaEleEstimatorCSA14.h"
-//#include "SUSYBSMAnalysis/RazorTuplizer/interface/ElectronMVAEstimatorRun2NonTrig.h"
+#include "SUSYBSMAnalysis/RazorTuplizer/interface/EGammaMvaEleEstimatorCSA14.h"
+#include "SUSYBSMAnalysis/RazorTuplizer/interface/ElectronMVAEstimatorRun2NonTrig.h"
 //#include "RecoEcal/EgammaCoreTools/interface/EcalClusterLazyTools.h"
-//#include "SUSYBSMAnalysis/RazorTuplizer/interface/EGammaMvaPhotonEstimator.h"
+#include "SUSYBSMAnalysis/RazorTuplizer/interface/EGammaMvaPhotonEstimator.h"
 
 //ROOT includes
 #include "TTree.h"
@@ -91,6 +92,7 @@ class RazorTuplizer : public edm::EDAnalyzer {
   virtual void enableJetBranches();
   virtual void enableJetAK8Branches();
   virtual void enableMetBranches();
+  virtual void enableTriggerBranches();
   virtual void enableMCBranches();
   virtual void enableGenParticleBranches();
 
@@ -105,6 +107,7 @@ class RazorTuplizer : public edm::EDAnalyzer {
   virtual bool fillJets();//Fills AK5 Jet 4-momentum, CSV, and CISV. PT > 20GeV
   virtual bool fillJetsAK8();//Fills AK8 Jet 4-momentum
   virtual bool fillMet(const edm::Event& iEvent);//Fills MET(mag, phi)
+  virtual bool fillTrigger(const edm::Event& iEvent);//Fills trigger information
   virtual bool fillMC();
   virtual bool fillGenParticles();
 
@@ -113,9 +116,29 @@ class RazorTuplizer : public edm::EDAnalyzer {
   virtual void analyze(const edm::Event&, const edm::EventSetup&) override;
   virtual void endJob() override;
 
+  //MVAs for triggering and non-triggering electron ID                                                                                                  
+  EGammaMvaEleEstimatorCSA14* myMVATrig;
+  ElectronMVAEstimatorRun2NonTrig* myMVANonTrig;
+  EGammaMvaPhotonEstimator* myPhotonMVA;
+
   // Control Switches
   bool    isData_;
   bool    useGen_;
+  bool enableTriggerInfo_;
+
+  // Mapping of the HLT Triggers and Filters
+  string triggerPathNamesFile_;
+  string eleHLTFilterNamesFile_;
+  string muonHLTFilterNamesFile_;
+  string photonHLTFilterNamesFile_;
+  static const int NTriggersMAX = 200;
+  string triggerPathNames[NTriggersMAX];
+  static const int MAX_ElectronHLTFilters = 100;
+  string eleHLTFilterNames[MAX_ElectronHLTFilters];
+  static const int MAX_MuonHLTFilters = 100;
+  string muonHLTFilterNames[MAX_MuonHLTFilters];
+  static const int MAX_PhotonHLTFilters = 100;
+  string photonHLTFilterNames[MAX_PhotonHLTFilters];
 
   //EDM tokens for each miniAOD input object
   edm::EDGetTokenT<reco::VertexCollection> verticesToken_;
@@ -129,12 +152,20 @@ class RazorTuplizer : public edm::EDAnalyzer {
   edm::EDGetTokenT<reco::PFCandidateCollection> pfCandsToken_;
   edm::EDGetTokenT<reco::GenParticleCollection> genParticlesToken_;
   edm::EDGetTokenT<reco::GenJetCollection> genJetsToken_;
+  edm::EDGetTokenT<edm::TriggerResults> triggerBitsToken_;
+  edm::EDGetTokenT<trigger::TriggerEvent> triggerEventToken_;
   edm::EDGetTokenT<reco::PFMETCollection> metToken_;
   edm::EDGetTokenT<reco::PFMETCollection> metNoHFToken_;
   edm::EDGetTokenT<reco::PFMETCollection> metPuppiToken_;
   edm::EDGetTokenT<LHEEventProduct> lheInfoToken_;
   edm::EDGetTokenT<GenEventInfoProduct> genInfoToken_;
   edm::EDGetTokenT<std::vector<PileupSummaryInfo> > puInfoToken_;
+  edm::EDGetTokenT<double> rhoAllToken_;
+  edm::EDGetTokenT<double> rhoFastjetAllToken_;
+  edm::EDGetTokenT<double> rhoFastjetAllCaloToken_;
+  edm::EDGetTokenT<double> rhoFastjetCentralCaloToken_;
+  edm::EDGetTokenT<double> rhoFastjetCentralChargedPileUpToken_;
+  edm::EDGetTokenT<double> rhoFastjetCentralNeutralToken_;
 
   edm::Handle<reco::VertexCollection> vertices;
   edm::Handle<reco::MuonCollection> muons;
@@ -147,15 +178,23 @@ class RazorTuplizer : public edm::EDAnalyzer {
   edm::Handle<reco::PFCandidateCollection> pfCands;
   edm::Handle<reco::GenParticleCollection> genParticles;
   edm::Handle<reco::GenJetCollection> genJets;
+  edm::Handle<edm::TriggerResults> triggerBits;
+  edm::Handle<trigger::TriggerEvent> triggerEvent;
   edm::Handle<reco::PFMETCollection> mets;
   edm::Handle<reco::PFMETCollection> metsNoHF;
   edm::Handle<reco::PFMETCollection> metsPuppi;
   edm::Handle<LHEEventProduct> lheInfo;
   edm::Handle<GenEventInfoProduct> genInfo;
   edm::Handle<std::vector<PileupSummaryInfo> > puInfo;
+  edm::Handle<double> rhoAll;
+  edm::Handle<double> rhoFastjetAll;
+  edm::Handle<double> rhoFastjetAllCalo;
+  edm::Handle<double> rhoFastjetCentralCalo;
+  edm::Handle<double> rhoFastjetCentralChargedPileUp;
+  edm::Handle<double> rhoFastjetCentralNeutral;
   const reco::Vertex *myPV;
 
-  //output tree                                                                                                                                     
+  //output tree
   TTree *RazorEvents;
   TH1F *NEvents;
 
@@ -418,6 +457,11 @@ class RazorTuplizer : public edm::EDAnalyzer {
   float gParticlePt[GENPARTICLEARRAYSIZE];
   float gParticleEta[GENPARTICLEARRAYSIZE];
   float gParticlePhi[GENPARTICLEARRAYSIZE];
+
+  //trigger info
+  vector<string>  *nameHLT;
+  bool triggerDecision[NTriggersMAX];
+  int  triggerHLTPrescale[NTriggersMAX];
 
 };
 

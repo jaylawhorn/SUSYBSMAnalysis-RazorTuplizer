@@ -4,30 +4,230 @@ RazorTuplizer::RazorTuplizer(const edm::ParameterSet& iConfig):
   //get inputs from config file
   isData_(iConfig.getParameter<bool> ("isData")),
   useGen_(iConfig.getParameter<bool> ("useGen")),
+  enableTriggerInfo_(iConfig.getParameter<bool> ("enableTriggerInfo")),
+  triggerPathNamesFile_(iConfig.getParameter<string> ("triggerPathNamesFile")),
+  eleHLTFilterNamesFile_(iConfig.getParameter<string> ("eleHLTFilterNamesFile")),
+  muonHLTFilterNamesFile_(iConfig.getParameter<string> ("muonHLTFilterNamesFile")),
+  photonHLTFilterNamesFile_(iConfig.getParameter<string> ("photonHLTFilterNamesFile")),
   verticesToken_(consumes<reco::VertexCollection>(iConfig.getParameter<edm::InputTag>("vertices"))),
   muonsToken_(consumes<reco::MuonCollection>(iConfig.getParameter<edm::InputTag>("muons"))),
   electronsToken_(consumes<reco::GsfElectronCollection>(iConfig.getParameter<edm::InputTag>("electrons"))),
+  tausToken_(consumes<reco::PFTauCollection>(iConfig.getParameter<edm::InputTag>("taus"))),
   photonsToken_(consumes<reco::PhotonCollection>(iConfig.getParameter<edm::InputTag>("photons"))),
   jetsToken_(consumes<reco::PFJetCollection>(iConfig.getParameter<edm::InputTag>("jets"))),
   jetsPuppiToken_(consumes<reco::PFJetCollection>(iConfig.getParameter<edm::InputTag>("jetsPuppi"))),
   jetsAK8Token_(consumes<reco::PFJetCollection>(iConfig.getParameter<edm::InputTag>("jetsAK8"))),
+  pfCandsToken_(consumes<reco::PFCandidateCollection>(iConfig.getParameter<edm::InputTag>("pfCands"))),
   genParticlesToken_(consumes<reco::GenParticleCollection>(iConfig.getParameter<edm::InputTag>("genParticles"))),
   genJetsToken_(consumes<reco::GenJetCollection>(iConfig.getParameter<edm::InputTag>("genJets"))),
+  triggerBitsToken_(consumes<edm::TriggerResults>(iConfig.getParameter<edm::InputTag>("triggerBits"))),
+  triggerEventToken_(consumes<trigger::TriggerEvent>(iConfig.getParameter<edm::InputTag>("triggerEvent"))),
+  metToken_(consumes<reco::PFMETCollection>(iConfig.getParameter<edm::InputTag>("mets"))),
+  metNoHFToken_(consumes<reco::PFMETCollection>(iConfig.getParameter<edm::InputTag>("metsNoHF"))),
+  metPuppiToken_(consumes<reco::PFMETCollection>(iConfig.getParameter<edm::InputTag>("metsPuppi"))),
+  //metFilterBitsToken_(consumes<edm::TriggerResults>(iConfig.getParameter<edm::InputTag>("metFilterBits"))),
   lheInfoToken_(consumes<LHEEventProduct>(iConfig.getParameter<edm::InputTag>("lheInfo"))),
   genInfoToken_(consumes<GenEventInfoProduct>(iConfig.getParameter<edm::InputTag>("genInfo"))),
-  puInfoToken_(consumes<std::vector<PileupSummaryInfo> >(iConfig.getParameter<edm::InputTag>("puInfo")))
-  //rhoAllToken_(consumes<double>(iConfig.getParameter<edm::InputTag>("rhoAll"))),
-  //rhoFastjetAllToken_(consumes<double>(iConfig.getParameter<edm::InputTag>("rhoFastjetAll"))),
-  //rhoFastjetAllCaloToken_(consumes<double>(iConfig.getParameter<edm::InputTag>("rhoFastjetAllCalo"))),
-  //rhoFastjetCentralCaloToken_(consumes<double>(iConfig.getParameter<edm::InputTag>("rhoFastjetCentralCalo"))),
-  //rhoFastjetCentralChargedPileUpToken_(consumes<double>(iConfig.getParameter<edm::InputTag>("rhoFastjetCentralChargedPileUp"))),
-  //rhoFastjetCentralNeutralToken_(consumes<double>(iConfig.getParameter<edm::InputTag>("rhoFastjetCentralNeutral")))
+  puInfoToken_(consumes<std::vector<PileupSummaryInfo> >(iConfig.getParameter<edm::InputTag>("puInfo"))),
+  rhoAllToken_(consumes<double>(iConfig.getParameter<edm::InputTag>("rhoAll"))),
+  rhoFastjetAllToken_(consumes<double>(iConfig.getParameter<edm::InputTag>("rhoFastjetAll"))),
+  rhoFastjetAllCaloToken_(consumes<double>(iConfig.getParameter<edm::InputTag>("rhoFastjetAllCalo"))),
+  rhoFastjetCentralCaloToken_(consumes<double>(iConfig.getParameter<edm::InputTag>("rhoFastjetCentralCalo"))),
+  rhoFastjetCentralChargedPileUpToken_(consumes<double>(iConfig.getParameter<edm::InputTag>("rhoFastjetCentralChargedPileUp"))),
+  rhoFastjetCentralNeutralToken_(consumes<double>(iConfig.getParameter<edm::InputTag>("rhoFastjetCentralNeutral")))
 {
   edm::Service<TFileService> fs;
 
   //set up output tree                                                                                                                              
   RazorEvents = fs->make<TTree>("RazorEvents", "selected AOD information");
   NEvents = fs->make<TH1F>("NEvents",";;NEvents;",1,-0.5,0.5);
+
+  //set up electron MVA ID                                                                                                                              
+  std::vector<std::string> myTrigWeights;
+  myTrigWeights.push_back(edm::FileInPath("SUSYBSMAnalysis/RazorTuplizer/data/TrigIDMVA_25ns_EB_BDT.weights.xml").fullPath().c_str());
+  myTrigWeights.push_back(edm::FileInPath("SUSYBSMAnalysis/RazorTuplizer/data/TrigIDMVA_25ns_EE_BDT.weights.xml").fullPath().c_str());
+
+  myMVATrig = new EGammaMvaEleEstimatorCSA14();
+  myMVATrig->initialize("BDT",
+                        EGammaMvaEleEstimatorCSA14::kTrig,
+                        true,
+                        myTrigWeights);
+
+  std::vector<std::string> myNonTrigWeights;
+  myNonTrigWeights.push_back(edm::FileInPath("SUSYBSMAnalysis/RazorTuplizer/data/EIDmva_EB1_5_oldNonTrigSpring15_ConvVarCwoBoolean_TMVA412_FullStatLowPt_PairNegWeightsGlobal_BDT.weights.xml").fullPath().c_str());
+  myNonTrigWeights.push_back(edm::FileInPath("SUSYBSMAnalysis/RazorTuplizer/data/EIDmva_EB2_5_oldNonTrigSpring15_ConvVarCwoBoolean_TMVA412_FullStatLowPt_PairNegWeightsGlobal_BDT.weights.xml").fullPath().c_str());
+  myNonTrigWeights.push_back(edm::FileInPath("SUSYBSMAnalysis/RazorTuplizer/data/EIDmva_EE_5_oldNonTrigSpring15_ConvVarCwoBoolean_TMVA412_FullStatLowPt_PairNegWeightsGlobal_BDT.weights.xml").fullPath().c_str());
+  myNonTrigWeights.push_back(edm::FileInPath("SUSYBSMAnalysis/RazorTuplizer/data/EIDmva_EB1_10_oldNonTrigSpring15_ConvVarCwoBoolean_TMVA412_FullStatLowPt_PairNegWeightsGlobal_BDT.weights.xml").fullPath().c_str());
+  myNonTrigWeights.push_back(edm::FileInPath("SUSYBSMAnalysis/RazorTuplizer/data/EIDmva_EB2_10_oldNonTrigSpring15_ConvVarCwoBoolean_TMVA412_FullStatLowPt_PairNegWeightsGlobal_BDT.weights.xml").fullPath().c_str());
+  myNonTrigWeights.push_back(edm::FileInPath("SUSYBSMAnalysis/RazorTuplizer/data/EIDmva_EE_10_oldNonTrigSpring15_ConvVarCwoBoolean_TMVA412_FullStatLowPt_PairNegWeightsGlobal_BDT.weights.xml").fullPath().c_str());
+
+  myMVANonTrig = new ElectronMVAEstimatorRun2NonTrig();
+  myMVANonTrig->initialize("BDTG method",
+			   ElectronMVAEstimatorRun2NonTrig::kPHYS14,
+			   true,
+			   myNonTrigWeights);
+
+  //set up photon MVA ID                                                                                                                                
+  std::vector<std::string> myPhotonMVAWeights;
+  myPhotonMVAWeights.push_back(edm::FileInPath("SUSYBSMAnalysis/RazorTuplizer/data/PhotonIDMVA_Spring15_50ns_v0_EB.weights.xml").fullPath().c_str());
+  myPhotonMVAWeights.push_back(edm::FileInPath("SUSYBSMAnalysis/RazorTuplizer/data/PhotonIDMVA_Spring15_50ns_v0_EE.weights.xml").fullPath().c_str());
+  std::vector<std::string> myPhotonMVAMethodNames;
+  myPhotonMVAMethodNames.push_back("BDTG photons barrel");
+  myPhotonMVAMethodNames.push_back("BDTG photons endcap");
+
+  myPhotonMVA = new EGammaMvaPhotonEstimator();
+  myPhotonMVA->initialize(myPhotonMVAMethodNames,myPhotonMVAWeights,
+                          EGammaMvaPhotonEstimator::kPhotonMVATypeDefault);
+
+  //*****************************************************************************************                                                           
+  //Read in HLT Trigger Path List from config file                                                                                                      
+  //*****************************************************************************************                                                           
+  for (int i = 0; i<NTriggersMAX; ++i) triggerPathNames[i] = "";
+  ifstream myfile (edm::FileInPath(triggerPathNamesFile_.c_str()).fullPath().c_str()) ;
+  if (myfile.is_open()) {
+    string line;
+    int index;
+    string hltpathname;
+
+    while(myfile>>index>>hltpathname) {
+
+      if (index < NTriggersMAX) {
+        triggerPathNames[index] = hltpathname;
+      }
+    }
+    myfile.close();
+  } else {
+    cout << "ERROR!!! Could not open trigger path name file : " << edm::FileInPath(triggerPathNamesFile_.c_str()).fullPath().c_str() << "\n";
+  }
+
+  if(enableTriggerInfo_) {
+    cout << "\n";
+    cout << "****************** Trigger Paths Defined For Razor Ntuple ******************\n";
+    for (int i = 0; i<NTriggersMAX; ++i) {
+      if (triggerPathNames[i] != "") cout << "Trigger " << i << " " << triggerPathNames[i] << "\n";
+    }
+    cout << "****************************************************************************\n";
+    cout << "\n";
+  }
+
+  //*****************************************************************************************                                                           
+  //Read in Electron HLT Filters List from config file                                                                                                  
+  //*****************************************************************************************                                                           
+  for (int i = 0; i<MAX_ElectronHLTFilters; ++i) eleHLTFilterNames[i] = "";
+  ifstream myEleHLTFilterFile (edm::FileInPath(eleHLTFilterNamesFile_.c_str()).fullPath().c_str()) ;
+  if (myEleHLTFilterFile.is_open()) {
+    char tmp[1024];
+    string line;
+    int index;
+    string hltfiltername;
+
+    while(myEleHLTFilterFile>>line) {
+
+      if ( line.empty() || line.substr(0,1) == "#") {
+        myEleHLTFilterFile.getline(tmp,1024);
+        continue;
+      }
+
+      index = atoi(line.c_str());
+      myEleHLTFilterFile >> hltfiltername;
+
+      if (index < MAX_ElectronHLTFilters) {
+        eleHLTFilterNames[index] = hltfiltername;
+      }
+    }
+    myEleHLTFilterFile.close();
+  } else {
+    cout << "ERROR!!! Could not open trigger path name file : " << edm::FileInPath(eleHLTFilterNamesFile_.c_str()).fullPath().c_str() << "\n";
+  }
+
+  if(enableTriggerInfo_) {
+    cout << "\n";
+    cout << "****************** Electron HLT Filters Defined For Razor Ntuple ******************\n";
+    for (int i = 0; i<MAX_ElectronHLTFilters; ++i) {
+      if (eleHLTFilterNames[i] != "") cout << "Ele HLT Filters " << i << " " << eleHLTFilterNames[i] << "\n";
+    }
+    cout << "****************************************************************************\n";
+    cout << "\n";
+  }
+
+  //*****************************************************************************************                                                           
+  //Read in Muon HLT Filters List from config file                                                                                                      
+  //*****************************************************************************************                                                           
+  for (int i = 0; i<MAX_MuonHLTFilters; ++i) muonHLTFilterNames[i] = "";
+  ifstream myMuonHLTFilterFile (edm::FileInPath(muonHLTFilterNamesFile_.c_str()).fullPath().c_str()) ;
+  if (myMuonHLTFilterFile.is_open()) {
+    char tmp[1024];
+    string line;
+    int index;
+    string hltfiltername;
+
+    while(myMuonHLTFilterFile>>line) {
+
+      if ( line.empty() || line.substr(0,1) == "#") {
+        myMuonHLTFilterFile.getline(tmp,1024);
+        continue;
+      }
+
+      index = atoi(line.c_str());
+      myMuonHLTFilterFile >> hltfiltername;
+
+      if (index < MAX_MuonHLTFilters) {
+        muonHLTFilterNames[index] = hltfiltername;
+      }
+    }
+    myMuonHLTFilterFile.close();
+  } else {
+    cout << "ERROR!!! Could not open trigger path name file : " << edm::FileInPath(muonHLTFilterNamesFile_.c_str()).fullPath().c_str() << "\n";
+  }
+  if(enableTriggerInfo_) {
+    cout << "\n";
+    cout << "****************** Muon HLT Filters Defined For Razor Ntuple ******************\n";
+    for (int i = 0; i<MAX_MuonHLTFilters; ++i) {
+      if (muonHLTFilterNames[i] != "") cout << "Muon HLT Filters " << i << " " << muonHLTFilterNames[i] << "\n";
+    }
+    cout << "****************************************************************************\n";
+    cout << "\n";
+  }
+
+  //*****************************************************************************************                                                           
+  //Read in Photon HLT Filters List from config file                                                                                                    
+  //*****************************************************************************************                                                           
+  for (int i = 0; i<MAX_PhotonHLTFilters; ++i) photonHLTFilterNames[i] = "";
+  ifstream myPhotonHLTFilterFile (edm::FileInPath(photonHLTFilterNamesFile_.c_str()).fullPath().c_str()) ;
+  if (myPhotonHLTFilterFile.is_open()) {
+    char tmp[1024];
+    string line;
+    int index;
+    string hltfiltername;
+
+    while(myPhotonHLTFilterFile>>line) {
+
+      if ( line.empty() || line.substr(0,1) == "#") {
+        myPhotonHLTFilterFile.getline(tmp,1024);
+        continue;
+      }
+
+      index = atoi(line.c_str());
+      myPhotonHLTFilterFile >> hltfiltername;
+
+      if (index < MAX_PhotonHLTFilters) {
+        photonHLTFilterNames[index] = hltfiltername;
+      }
+    }
+    myPhotonHLTFilterFile.close();
+  } else {
+    cout << "ERROR!!! Could not open trigger path name file : " << edm::FileInPath(photonHLTFilterNamesFile_.c_str()).fullPath().c_str() << "\n";
+  }
+
+  if(enableTriggerInfo_) {
+    cout << "\n";
+    cout << "****************** Photon HLT Filters Defined For Razor Ntuple ******************\n";
+    for (int i = 0; i<MAX_PhotonHLTFilters; ++i) {
+      if (photonHLTFilterNames[i] != "") cout << "Photon HLT Filters " << i << " " << photonHLTFilterNames[i] << "\n";
+    }
+    cout << "****************************************************************************\n";
+    cout << "\n";
+  }
 
 }
 
@@ -39,10 +239,13 @@ void RazorTuplizer::setBranches(){
   enablePileUpBranches();
   enableMuonBranches();
   enableElectronBranches();
+  enableTauBranches();
   enablePhotonBranches();
   enableJetBranches();
   enableJetAK8Branches();
+  enableMetBranches();
 
+  if (enableTriggerInfo_) enableTriggerBranches();
   enableMCBranches();
   enableGenParticleBranches();
 
@@ -98,7 +301,7 @@ void RazorTuplizer::enableMuonBranches(){
   RazorEvents->Branch("muon_chargedPileupMiniIso", muon_chargedPileupMiniIso, "muon_chargedPileupMiniIso[nMuons]/F");
   RazorEvents->Branch("muon_activityMiniIsoAnnulus", muon_activityMiniIsoAnnulus, "muon_activityMiniIsoAnnulus[nMuons]/F");
   RazorEvents->Branch("muon_passSingleMuTagFilter", muon_passSingleMuTagFilter, "muon_passSingleMuTagFilter[nMuons]/O");
-  //RazorEvents->Branch("muon_passHLTFilter", &muon_passHLTFilter, Form("muon_passHLTFilter[nMuons][%d]/O",MAX_MuonHLTFilters));
+  RazorEvents->Branch("muon_passHLTFilter", &muon_passHLTFilter, Form("muon_passHLTFilter[nMuons][%d]/O",MAX_MuonHLTFilters));
 }
 
 void RazorTuplizer::enableElectronBranches(){
@@ -142,7 +345,48 @@ void RazorTuplizer::enableElectronBranches(){
   RazorEvents->Branch("ele_passTPTwoTagFilter", ele_passTPTwoTagFilter, "ele_passTPTwoTagFilter[nElectrons]/O");
   RazorEvents->Branch("ele_passTPOneProbeFilter", ele_passTPOneProbeFilter, "ele_passTPOneProbeFilter[nElectrons]/O");
   RazorEvents->Branch("ele_passTPTwoProbeFilter", ele_passTPTwoProbeFilter, "ele_passTPTwoProbeFilter[nElectrons]/O");
-  //RazorEvents->Branch("ele_passHLTFilter", &ele_passHLTFilter, Form("ele_passHLTFilter[nElectrons][%d]/O",MAX_ElectronHLTFilters));
+  RazorEvents->Branch("ele_passHLTFilter", &ele_passHLTFilter, Form("ele_passHLTFilter[nElectrons][%d]/O",MAX_ElectronHLTFilters));
+}
+
+void RazorTuplizer::enableTauBranches(){
+  RazorEvents->Branch("nTaus", &nTaus,"nTaus/I");
+  RazorEvents->Branch("tauE", tauE,"tauE[nTaus]/F");
+  RazorEvents->Branch("tauPt", tauPt,"tauPt[nTaus]/F");
+  RazorEvents->Branch("tauEta", tauEta,"tauEta[nTaus]/F");
+  RazorEvents->Branch("tauPhi", tauPhi,"tauPhi[nTaus]/F");
+  RazorEvents->Branch("tau_IsLoose", tau_IsLoose, "tau_IsLoose[nTaus]/O");
+  RazorEvents->Branch("tau_IsMedium", tau_IsMedium, "tau_IsMedium[nTaus]/O");
+  RazorEvents->Branch("tau_IsTight", tau_IsTight, "tau_IsTight[nTaus]/O");
+  RazorEvents->Branch("tau_passEleVetoLoose", tau_passEleVetoLoose, "tau_passEleVetoLoose[nTaus]/O");
+  RazorEvents->Branch("tau_passEleVetoMedium", tau_passEleVetoMedium, "tau_passEleVetoMedium[nTaus]/O");
+  RazorEvents->Branch("tau_passEleVetoTight", tau_passEleVetoTight, "tau_passEleVetoTight[nTaus]/O");
+  RazorEvents->Branch("tau_passMuVetoLoose", tau_passMuVetoLoose, "tau_passMuVetoLoose[nTaus]/O");
+  RazorEvents->Branch("tau_passMuVetoMedium", tau_passMuVetoMedium, "tau_passMuVetoMedium[nTaus]/O");
+  RazorEvents->Branch("tau_passMuVetoTight", tau_passMuVetoTight, "tau_passMuVetoTight[nTaus]/O");
+  RazorEvents->Branch("tau_ID", tau_ID, "tau_ID[nTaus]/i");
+  RazorEvents->Branch("tau_combinedIsoDeltaBetaCorr3Hits", tau_combinedIsoDeltaBetaCorr3Hits, "tau_combinedIsoDeltaBetaCorr3Hits[nTaus]/F");
+  RazorEvents->Branch("tau_chargedIsoPtSum", tau_chargedIsoPtSum, "tau_chargedIsoPtSum[nTaus]/F");
+  RazorEvents->Branch("tau_neutralIsoPtSum", tau_neutralIsoPtSum, "tau_neutralIsoPtSum[nTaus]/F");
+  RazorEvents->Branch("tau_puCorrPtSum", tau_puCorrPtSum, "tau_puCorrPtSum[nTaus]/F");
+  RazorEvents->Branch("tau_eleVetoMVA", tau_eleVetoMVA, "tau_eleVetoMVA[nTaus]/F");
+  RazorEvents->Branch("tau_eleVetoCategory", tau_eleVetoCategory, "tau_eleVetoCategory[nTaus]/I");
+  RazorEvents->Branch("tau_muonVetoMVA", tau_muonVetoMVA, "tau_muonVetoMVA[nTaus]/F");
+  RazorEvents->Branch("tau_isoMVAnewDMwLT", tau_isoMVAnewDMwLT, "tau_isoMVAnewDMwLT[nTaus]/F");
+  RazorEvents->Branch("tau_isoMVAnewDMwoLT", tau_isoMVAnewDMwoLT, "tau_isoMVAnewDMwoLT[nTaus]/F");
+  RazorEvents->Branch("tau_leadCandPt", tau_leadCandPt, "tau_leadCandPt[nTaus]/F");
+  RazorEvents->Branch("tau_leadCandID", tau_leadCandID, "tau_leadCandID[nTaus]/I");
+  RazorEvents->Branch("tau_leadChargedHadrCandPt", tau_leadChargedHadrCandPt, "tau_leadChargedHadrCandPt[nTaus]/F");
+  RazorEvents->Branch("tau_leadChargedHadrCandID", tau_leadChargedHadrCandID, "tau_leadChargedHadrCandID[nTaus]/I");
+}
+
+void RazorTuplizer::enableIsoPFCandidateBranches(){
+  RazorEvents->Branch("nIsoPFCandidates", &nIsoPFCandidates, "nIsoPFCandidates/i");
+  RazorEvents->Branch("isoPFCandidatePt", isoPFCandidatePt, "isoPFCandidatePt[nIsoPFCandidates]/F");
+  RazorEvents->Branch("isoPFCandidateEta", isoPFCandidateEta, "isoPFCandidateEta[nIsoPFCandidates]/F");
+  RazorEvents->Branch("isoPFCandidatePhi", isoPFCandidatePhi, "isoPFCandidatePhi[nIsoPFCandidates]/F");
+  RazorEvents->Branch("isoPFCandidateIso04", isoPFCandidateIso04, "isoPFCandidateIso04[nIsoPFCandidates]/F");
+  RazorEvents->Branch("isoPFCandidateD0", isoPFCandidateD0, "isoPFCandidateD0[nIsoPFCandidates]/F");
+  RazorEvents->Branch("isoPFCandidatePdgId", isoPFCandidatePdgId, "isoPFCandidatePdgId[nIsoPFCandidates]/I");
 }
 
 void RazorTuplizer::enablePhotonBranches(){
@@ -167,7 +411,7 @@ void RazorTuplizer::enablePhotonBranches(){
   RazorEvents->Branch("pho_superClusterEta", pho_superClusterEta, "pho_superClusterEta[nPhotons]/F");
   RazorEvents->Branch("pho_superClusterPhi", pho_superClusterPhi, "pho_superClusterPhi[nPhotons]/F");
   RazorEvents->Branch("pho_hasPixelSeed", pho_hasPixelSeed, "pho_hasPixelSeed[nPhotons]/O");
-  //RazorEvents->Branch("pho_passHLTFilter", &pho_passHLTFilter, Form("pho_passHLTFilter[nPhotons][%d]/O",MAX_PhotonHLTFilters));
+  RazorEvents->Branch("pho_passHLTFilter", &pho_passHLTFilter, Form("pho_passHLTFilter[nPhotons][%d]/O",MAX_PhotonHLTFilters));
 }
 
 void RazorTuplizer::enableJetBranches(){
@@ -213,6 +457,42 @@ void RazorTuplizer::enableJetAK8Branches(){
   RazorEvents->Branch("fatJetTau3", fatJetTau3,"fatJetTau3[nFatJets]/F");
 }
 
+void RazorTuplizer::enableMetBranches(){
+  RazorEvents->Branch("metPt", &metPt, "metPt/F");
+  RazorEvents->Branch("metPhi", &metPhi, "metPhi/F");
+  RazorEvents->Branch("sumMET", &sumMET, "sumMET/F");
+  RazorEvents->Branch("metType0Pt", &metType0Pt, "metType0Pt/F");
+  RazorEvents->Branch("metType0Phi", &metType0Phi, "metType0Phi/F");
+  RazorEvents->Branch("metType1Pt", &metType1Pt, "metType1Pt/F");
+  RazorEvents->Branch("metType1Phi", &metType1Phi, "metType1Phi/F");
+  RazorEvents->Branch("metType0Plus1Pt", &metType0Plus1Pt, "metType0Plus1Pt/F");
+  RazorEvents->Branch("metType0Plus1Phi", &metType0Plus1Phi, "metType0Plus1Phi/F");
+  RazorEvents->Branch("metNoHFPt", &metNoHFPt, "metNoHFPt/F");
+  RazorEvents->Branch("metNoHFPhi", &metNoHFPhi, "metNoHFPhi/F");
+  RazorEvents->Branch("metPuppiPt", &metPuppiPt, "metPuppiPt/F");
+  RazorEvents->Branch("metPuppiPhi", &metPuppiPhi, "metPuppiPhi/F");
+
+  RazorEvents->Branch("Flag_HBHENoiseFilter", &Flag_HBHENoiseFilter, "Flag_HBHENoiseFilter/O");
+  RazorEvents->Branch("Flag_CSCTightHaloFilter", &Flag_CSCTightHaloFilter, "Flag_CSCTightHaloFilter/O");
+  RazorEvents->Branch("Flag_hcalLaserEventFilter", &Flag_hcalLaserEventFilter, "Flag_hcalLaserEventFilter/O");
+  RazorEvents->Branch("Flag_EcalDeadCellTriggerPrimitiveFilter", &Flag_EcalDeadCellTriggerPrimitiveFilter, "Flag_EcalDeadCellTriggerPrimitiveFilter/O");
+  RazorEvents->Branch("Flag_goodVertices", &Flag_goodVertices, "Flag_goodVertices/O");
+  RazorEvents->Branch("Flag_trackingFailureFilter", &Flag_trackingFailureFilter, "Flag_trackingFailureFilter/O");
+  RazorEvents->Branch("Flag_eeBadScFilter", &Flag_eeBadScFilter, "Flag_eeBadScFilter/O");
+  RazorEvents->Branch("Flag_ecalLaserCorrFilter", &Flag_ecalLaserCorrFilter, "Flag_ecalLaserCorrFilter/O");
+  RazorEvents->Branch("Flag_trkPOGFilters", &Flag_trkPOGFilters, "Flag_trkPOGFilters/O");
+  RazorEvents->Branch("Flag_trkPOG_manystripclus53X", &Flag_trkPOG_manystripclus53X, "Flag_trkPOG_manystripclus53X/O");
+  RazorEvents->Branch("Flag_trkPOG_toomanystripclus53X", &Flag_trkPOG_toomanystripclus53X, "Flag_trkPOG_toomanystripclus53X/O");
+  RazorEvents->Branch("Flag_trkPOG_logErrorTooManyClusters", &Flag_trkPOG_logErrorTooManyClusters, "Flag_trkPOG_logErrorTooManyClusters/O");
+  RazorEvents->Branch("Flag_METFilters", &Flag_METFilters, "Flag_METFilters/O");
+}
+
+void RazorTuplizer::enableTriggerBranches(){
+  nameHLT = new std::vector<std::string>; nameHLT->clear();
+  RazorEvents->Branch("HLTDecision", &triggerDecision, ("HLTDecision[" + std::to_string(NTriggersMAX) +  "]/O").c_str());
+  RazorEvents->Branch("HLTPrescale", &triggerHLTPrescale, ("HLTPrescale[" + std::to_string(NTriggersMAX) +  "]/I").c_str());
+}
+
 void RazorTuplizer::enableMCBranches(){
   RazorEvents->Branch("nGenJets", &nGenJets, "nGenJets/I");
   RazorEvents->Branch("genJetE", genJetE, "genJetE[nGenJets]/F");
@@ -245,10 +525,17 @@ void RazorTuplizer::loadEvent(const edm::Event& iEvent){
   iEvent.getByToken(verticesToken_, vertices);
   iEvent.getByToken(muonsToken_, muons);
   iEvent.getByToken(electronsToken_, electrons);
+  iEvent.getByToken(tausToken_, taus);
   iEvent.getByToken(photonsToken_, photons);
   iEvent.getByToken(jetsToken_, jets);
   iEvent.getByToken(jetsPuppiToken_, jetsPuppi);
   iEvent.getByToken(jetsAK8Token_, jetsAK8);
+  iEvent.getByToken(triggerBitsToken_, triggerBits);
+  iEvent.getByToken(triggerEventToken_, triggerEvent);
+  iEvent.getByToken(metToken_, mets);
+  iEvent.getByToken(metNoHFToken_, metsNoHF);
+  iEvent.getByToken(metPuppiToken_, metsPuppi);
+  //iEvent.getByToken(metFilterBitsToken_, metFilterBits);
   if (useGen_) {
     iEvent.getByToken(genParticlesToken_,genParticles);
     iEvent.getByToken(genJetsToken_,genJets);
@@ -274,9 +561,16 @@ void RazorTuplizer::resetBranches(){
   fixedGridRhoFastjetCentralChargedPileUp = -99.0;
   fixedGridRhoFastjetCentralNeutral = -99.0;
 
+  for(int i = 0; i < NTriggersMAX; i++){
+    triggerDecision[i] = false;
+    triggerHLTPrescale[i] = 0;
+  }
+
   nBunchXing = 0;
   nMuons = 0;
   nElectrons = 0;
+  nTaus = 0;
+  nIsoPFCandidates = 0;
   nPhotons = 0;
   nJets = 0;
   nFatJets = 0;
@@ -314,8 +608,8 @@ void RazorTuplizer::resetBranches(){
     muon_chargedPileupMiniIso[i] = -99.0;
     muon_activityMiniIsoAnnulus[i] = -99.0;
     muon_passSingleMuTagFilter[i] = false;
-    //for (int q=0;q<MAX_MuonHLTFilters;q++) muon_passHLTFilter[i][q] = false;  
-
+    for (int q=0;q<MAX_MuonHLTFilters;q++) muon_passHLTFilter[i][q] = false;  
+    
     //Electron                                                                                                                                      
     eleE[i] = 0.0;
     elePt[i] = 0.0;
@@ -355,7 +649,44 @@ void RazorTuplizer::resetBranches(){
     ele_passTPTwoTagFilter[i] = false;
     ele_passTPOneProbeFilter[i] = false;
     ele_passTPTwoProbeFilter[i] = false;
-    //for (int q=0;q<MAX_ElectronHLTFilters;q++) ele_passHLTFilter[i][q] = false;
+    for (int q=0;q<MAX_ElectronHLTFilters;q++) ele_passHLTFilter[i][q] = false;
+
+    //Tau                                                                                                                                           
+    tauE[i] = 0.0;
+    tauPt[i] = 0.0;
+    tauEta[i] = 0.0;
+    tauPhi[i] = 0.0;
+    tau_IsLoose[i] = false;
+    tau_IsMedium[i] = false;
+    tau_IsTight[i] = false;
+    tau_passEleVetoLoose[i] = false;
+    tau_passEleVetoMedium[i] = false;
+    tau_passEleVetoTight[i] = false;
+    tau_passMuVetoLoose[i] = false;
+    tau_passMuVetoMedium[i] = false;
+    tau_passMuVetoTight[i] = false;
+    tau_ID[i] = 0;
+    tau_combinedIsoDeltaBetaCorr3Hits[i] = -99.0;
+    tau_chargedIsoPtSum[i] = -99.0;
+    tau_neutralIsoPtSum[i] = -99.0;
+    tau_puCorrPtSum[i] = -99.0;
+    tau_eleVetoMVA[i] = -99.0;
+    tau_eleVetoCategory[i] = -1;
+    tau_muonVetoMVA[i] = -99.0;
+    tau_isoMVAnewDMwLT[i] = -99.0;
+    tau_isoMVAnewDMwoLT[i] = -99.0;
+    tau_leadCandPt[i] = -99.0;
+    tau_leadCandID[i] = 0;
+    tau_leadChargedHadrCandPt[i] = -99.0;
+    tau_leadChargedHadrCandID[i] = 0;
+
+    //IsoPFCandidates                                                                                                                               
+    isoPFCandidatePt[i] = -99.0;
+    isoPFCandidateEta[i] = -99.0;
+    isoPFCandidatePhi[i] = -99.0;
+    isoPFCandidateIso04[i] = -99.0;
+    isoPFCandidateD0[i] = -99.0;
+    isoPFCandidatePdgId[i] = 0;
 
     //Photon                                                                                                                                        
     phoE[i] = 0.0;
@@ -378,7 +709,7 @@ void RazorTuplizer::resetBranches(){
     pho_superClusterEta[i] = -99.0;
     pho_superClusterPhi[i] = -99.0;
     pho_hasPixelSeed[i] = false;
-    //for (int q=0;q<MAX_PhotonHLTFilters;q++) pho_passHLTFilter[i][q] = false;
+    for (int q=0;q<MAX_PhotonHLTFilters;q++) pho_passHLTFilter[i][q] = false;
 
     //Jet                                                                                                                                           
     jetE[i] = 0.0;
@@ -439,6 +770,42 @@ void RazorTuplizer::resetBranches(){
 
   }
 
+  //MET                                                                                                                                               
+  metPt = -999;
+  metPhi = -999;
+  sumMET = -99.0;
+  UncMETdpx = -99.0;
+  UncMETdpy = -99.0;
+  UncMETdSumEt = -99.0;
+  metType0Pt = -99.0;
+  metType0Phi = -99.0;
+  metType1Pt = -99.0;
+  metType1Phi = -99.0;
+  metType0Plus1Pt = -99.0;
+  metType0Plus1Phi = -99.0;
+  metPtRecomputed = -99.0;
+  metPhiRecomputed = -99.0;
+  metNoHFPt = -99.0;
+  metNoHFPhi = -99.0;
+  metPuppiPt = -99.0;
+  metPuppiPhi = -99.0;
+  Flag_HBHENoiseFilter = false;
+  Flag_CSCTightHaloFilter = false;
+  Flag_hcalLaserEventFilter = false;
+  Flag_EcalDeadCellTriggerPrimitiveFilter = false;
+  Flag_goodVertices = false;
+  Flag_trackingFailureFilter = false;
+  Flag_eeBadScFilter = false;
+  Flag_ecalLaserCorrFilter = false;
+  Flag_trkPOGFilters = false;
+  Flag_trkPOG_manystripclus53X = false;
+  Flag_trkPOG_toomanystripclus53X = false;
+  Flag_trkPOG_logErrorTooManyClusters = false;
+  Flag_METFilters = false;
+
+  genMetPt = -999;
+  genMetPhi = -999;
+
 }
 
 bool RazorTuplizer::fillEventInfo(const edm::Event& iEvent){
@@ -471,12 +838,12 @@ bool RazorTuplizer::fillEventInfo(const edm::Event& iEvent){
   }
 
   //get rho                                                                                                                                         
-  //fixedGridRhoAll = *rhoAll;
-  //fixedGridRhoFastjetAll = *rhoFastjetAll;
-  //fixedGridRhoFastjetAllCalo = *rhoFastjetAllCalo;
-  //fixedGridRhoFastjetCentralCalo = *rhoFastjetCentralCalo;
-  //fixedGridRhoFastjetCentralChargedPileUp = *rhoFastjetCentralChargedPileUp;
-  //fixedGridRhoFastjetCentralNeutral = *rhoFastjetCentralNeutral;
+  fixedGridRhoAll = *rhoAll;
+  fixedGridRhoFastjetAll = *rhoFastjetAll;
+  fixedGridRhoFastjetAllCalo = *rhoFastjetAllCalo;
+  fixedGridRhoFastjetCentralCalo = *rhoFastjetCentralCalo;
+  fixedGridRhoFastjetCentralChargedPileUp = *rhoFastjetCentralChargedPileUp;
+  fixedGridRhoFastjetCentralNeutral = *rhoFastjetCentralNeutral;
 
   return true;
 }
@@ -547,6 +914,35 @@ bool RazorTuplizer::fillMuons(){
     //muon_photonAndNeutralHadronMiniIso[nMuons] = std::get<1>(PFMiniIso);
     //muon_chargedPileupMiniIso[nMuons] = std::get<2>(PFMiniIso);
     //muon_activityMiniIsoAnnulus[nMuons] = ActivityPFMiniIsolationAnnulus( packedPFCands, dynamic_cast<const reco::Candidate *>(&mu), 0.4, 0.05, 0.2 , 10.);
+
+    //*************************************************                                                                                                                             
+    //Trigger Object Matching                                                                                                                                                       
+    //*************************************************                                                                                                                             
+    bool passTagMuonFilter = false;
+    for (trigger::TriggerObject trigObject : *triggerEvent.getObjects()) {
+
+      if (deltaR(trigObject.eta(), trigObject.phi(),mu.eta(),mu.phi()) > 0.3) continue;
+
+      //check single muon filters                                                                                                                                                   
+      if ( trigObject.hasFilterLabel("hltL3fL1sMu25L1f0Tkf27QL3trkIsoFiltered0p09") ||
+           trigObject.hasFilterLabel("hltL3fL1sMu20Eta2p1L1f0Tkf24QL3trkIsoFiltered0p09") ||
+           trigObject.hasFilterLabel("hltL3fL1sMu16Eta2p1L1f0Tkf20QL3trkIsoFiltered0p09") ||
+           trigObject.hasFilterLabel("hltL3fL1sMu16L1f0Tkf20QL3trkIsoFiltered0p09") ||
+           trigObject.hasFilterLabel("hltL3crIsoL1sMu25L1f0L2f10QL3f27QL3trkIsoFiltered0p09") ||
+           trigObject.hasFilterLabel("hltL3crIsoL1sMu20Eta2p1L1f0L2f10QL3f24QL3trkIsoFiltered0p09") ||
+           trigObject.hasFilterLabel("hltL3crIsoL1sMu16Eta2p1L1f0L2f10QL3f20QL3trkIsoFiltered0p09") ||
+           trigObject.hasFilterLabel("hltL3crIsoL1sMu16L1f0L2f10QL3f20QL3trkIsoFiltered0p09")
+           ) passTagMuonFilter = true;
+
+      //check all filters                                                                                                                                                           
+      for ( int q=0; q<MAX_MuonHLTFilters;q++) {
+        if (trigObject.hasFilterLabel(muonHLTFilterNames[q].c_str())) muon_passHLTFilter[nMuons][q] = true;
+      }
+
+    }
+
+    muon_passSingleMuTagFilter[nMuons] = passTagMuonFilter;
+
     nMuons++;
   }
   return true;
@@ -625,6 +1021,112 @@ bool RazorTuplizer::fillElectrons(){
     nElectrons++;
   }
 
+  return true;
+}
+
+bool RazorTuplizer::fillTaus(){
+  for (const reco::PFTau &tau : *taus) {
+    if (tau.pt() < 20) continue;
+    tauE[nTaus] = tau.energy();
+    tauPt[nTaus] = tau.pt();
+    tauEta[nTaus] = tau.eta();
+    tauPhi[nTaus] = tau.phi();
+
+    //tau_IsLoose[nTaus] = bool(tau.tauID("byLooseCombinedIsolationDeltaBetaCorr3Hits"));
+    //tau_IsMedium[nTaus] = bool(tau.tauID("byMediumCombinedIsolationDeltaBetaCorr3Hits"));
+    //tau_IsTight[nTaus] = bool(tau.tauID("byTightCombinedIsolationDeltaBetaCorr3Hits"));
+    //tau_passEleVetoLoose[nTaus] = bool(tau.tauID("againstElectronLooseMVA5"));
+    //tau_passEleVetoMedium[nTaus] = bool(tau.tauID("againstElectronMediumMVA5"));
+    //tau_passEleVetoTight[nTaus] = bool(tau.tauID("againstElectronTightMVA5"));
+    //tau_passMuVetoLoose[nTaus] = bool(tau.tauID("againstMuonLoose3"));
+    //tau_passMuVetoMedium[nTaus] = bool(tau.tauID("")); //doesn't exist anymore in miniAOD 2015 v2                                                     
+    //tau_passMuVetoTight[nTaus] = bool(tau.tauID("againstMuonTight3") );
+    //tau_combinedIsoDeltaBetaCorr3Hits[nTaus] = tau.tauID("byCombinedIsolationDeltaBetaCorrRaw3Hits");
+    //tau_chargedIsoPtSum[nTaus] = tau.tauID("chargedIsoPtSum");
+    //tau_neutralIsoPtSum[nTaus] = tau.tauID("neutralIsoPtSum");
+    //tau_puCorrPtSum[nTaus] = tau.tauID("puCorrPtSum");
+    //tau_eleVetoMVA[nTaus] = tau.tauID("againstElectronMVA5raw") ;
+    //tau_eleVetoCategory[nTaus] = tau.tauID("againstElectronMVA5category");
+    //tau_muonVetoMVA[nTaus] = tau.tauID("againstMuonMVAraw"); //doesn't exist anymore in miniAOD 2015 v2                                               
+    //tau_isoMVAnewDMwLT[nTaus] = tau.tauID("byIsolationMVA3newDMwLTraw");
+    //tau_isoMVAnewDMwoLT[nTaus] = tau.tauID("byIsolationMVA3newDMwoLTraw") ; //doesn't exist anymore in miniAOD 2015 v2
+
+    //tau_ID[nTaus] =
+    //bool(tau.tauID("decayModeFinding")) +
+    //bool(tau.tauID("decayModeFindingNewDMs")) +
+    //bool(tau.tauID("byLooseCombinedIsolationDeltaBetaCorr3Hits")) +
+    //bool(tau.tauID("byMediumCombinedIsolationDeltaBetaCorr3Hits")) +
+    //bool(tau.tauID("byTightCombinedIsolationDeltaBetaCorr3Hits")) +
+    //bool(tau.tauID("againstElectronVLooseMVA5")) +
+    //bool(tau.tauID("againstElectronLooseMVA5")) +
+    //bool(tau.tauID("againstElectronMediumMVA5")) +
+    //bool(tau.tauID("againstElectronTightMVA5")) +
+    //bool(tau.tauID("againstElectronVTightMVA5")) +
+    //bool(tau.tauID("againstMuonLoose3")) +
+    //bool(tau.tauID("againstMuonTight3")) +
+    //bool(tau.tauID("byVLooseIsolationMVA3newDMwLT")) +
+    //bool(tau.tauID("byLooseIsolationMVA3newDMwLT")) +
+    //bool(tau.tauID("byMediumIsolationMVA3newDMwLT")) +
+    //bool(tau.tauID("byTightIsolationMVA3newDMwLT")) +
+    //bool(tau.tauID("byVTightIsolationMVA3newDMwLT")) +
+    //bool(tau.tauID("byVVTightIsolationMVA3newDMwLT"));
+    
+    //tau_leadCandPt[nTaus] = 0;
+    //tau_leadCandID[nTaus] = 0;
+    //tau_leadChargedHadrCandPt[nTaus] = 0;
+    //tau_leadChargedHadrCandID[nTaus] = 0;
+    //if (tau.leadCand().isNonnull()) {
+    //  tau_leadCandPt[nTaus] = tau.leadCand()->pt();
+    //  tau_leadCandID[nTaus] = tau.leadCand()->pdgId();
+    //}
+    //if (tau.leadChargedHadrCand().isNonnull()) {
+    //  tau_leadChargedHadrCandPt[nTaus] = tau.leadChargedHadrCand()->pt();
+    //  tau_leadChargedHadrCandID[nTaus] = tau.leadChargedHadrCand()->pdgId();
+    //}
+    
+    nTaus++;
+  }
+  
+  return true;
+}
+
+bool RazorTuplizer::fillIsoPFCandidates(){
+
+  //for (const reco::PFCandidate &candidate : *pfCands) {
+
+    //if (candidate.charge() != 0 && candidate.pt() > 5) { //&& candidate.fromPV() == 3 ) {
+    //double tmpIsoPFNoPU = 0;
+    //double tmpIsoPFPU = 0;
+    //for (const reco::PFCandidate &isoCandidate : *pfCands) {
+    //if ( (candidate.pdgId() != 1 && candidate.pdgId() != 2)
+    //&& deltaR(candidate.eta(), candidate.phi(), isoCandidate.eta(), isoCandidate.phi()) < 0.4
+    //&& !(candidate.eta() == isoCandidate.eta() && candidate.phi() == isoCandidate.phi())
+    //) {
+    //if (candidate.fromPV() == 2 || candidate.fromPV() == 3) {
+    //tmpIsoPFNoPU += isoCandidate.pt();
+    //} else if (candidate.fromPV() == 0) {
+    //tmpIsoPFPU += isoCandidate.pt();
+    //}
+    //  }
+    //}
+    
+    //if ((candidate.pt() > 50 )) { //||
+	//(candidate.pt() > 20 && (tmpIsoPFNoPU - 0.5*tmpIsoPFPU)/candidate.pt() < 3.0) ||
+	//(candidate.pt() <= 20 && tmpIsoPFNoPU - 0.5*tmpIsoPFPU < 25)
+	//) {
+      
+  //isoPFCandidatePt[nIsoPFCandidates] = candidate.pt();
+  //isoPFCandidateEta[nIsoPFCandidates] = candidate.eta();
+  //isoPFCandidatePhi[nIsoPFCandidates] = candidate.phi();
+      //isoPFCandidateIso04[nIsoPFCandidates] = max(0.0, tmpIsoPFNoPU - 0.5*tmpIsoPFPU) ;
+      //isoPFCandidateD0[nIsoPFCandidates] = candidate.dxy();
+      //isoPFCandidatePdgId[nIsoPFCandidates] = candidate.pdgId();
+      
+  //nIsoPFCandidates++;
+      //}
+  //}
+  //}
+  
   return true;
 }
 
@@ -867,6 +1369,92 @@ bool RazorTuplizer::fillJetsAK8(){
   return true;
 }
 
+bool RazorTuplizer::fillMet(const edm::Event& iEvent){
+
+  const reco::PFMET &Met = mets->front();
+  const reco::PFMET &MetNoHF = metsNoHF->front();
+  const reco::PFMET &MetPuppi = metsPuppi->front();
+
+  //metPt = Met.uncorPt();
+  //metPhi = Met.uncorPhi();
+  //sumMET = Met.sumEt();
+  metType0Pt = 0;
+  metType0Phi = 0;
+  metType1Pt = Met.pt();
+  metType1Phi = Met.phi();
+  metType0Plus1Pt = 0;
+  metType0Plus1Phi = 0;
+
+  metNoHFPt = MetNoHF.pt();
+  metNoHFPhi = MetNoHF.phi();
+  metPuppiPt = 0;//MetPuppi.pt();
+  metPuppiPhi = 0;//MetPuppi.phi();
+
+  //MET filters                                                                                                                                         
+  //const edm::TriggerNames &metNames = iEvent.triggerNames(*metFilterBits);
+  //for(unsigned int i = 0, n = metFilterBits->size(); i < n; ++i){
+  //  if(strcmp(metNames.triggerName(i).c_str(), "Flag_trackingFailureFilter") == 0)
+  //    Flag_trackingFailureFilter = metFilterBits->accept(i);
+  //  else if(strcmp(metNames.triggerName(i).c_str(), "Flag_goodVertices") == 0)
+  //    Flag_goodVertices = metFilterBits->accept(i);
+  //  else if(strcmp(metNames.triggerName(i).c_str(), "Flag_CSCTightHaloFilter") == 0)
+  //    Flag_CSCTightHaloFilter = metFilterBits->accept(i);
+  //  else if(strcmp(metNames.triggerName(i).c_str(), "Flag_trkPOGFilters") == 0)
+  //    Flag_trkPOGFilters = metFilterBits->accept(i);
+  //  else if(strcmp(metNames.triggerName(i).c_str(), "Flag_trkPOG_logErrorTooManyClusters") == 0)
+  //    Flag_trkPOG_logErrorTooManyClusters = metFilterBits->accept(i);
+  //  else if(strcmp(metNames.triggerName(i).c_str(), "Flag_EcalDeadCellTriggerPrimitiveFilter") == 0)
+  //    Flag_EcalDeadCellTriggerPrimitiveFilter = metFilterBits->accept(i);
+  //  else if(strcmp(metNames.triggerName(i).c_str(), "Flag_ecalLaserCorrFilter") == 0)
+  //    Flag_ecalLaserCorrFilter = metFilterBits->accept(i);
+  //  else if(strcmp(metNames.triggerName(i).c_str(), "Flag_trkPOG_manystripclus53X") == 0)
+  //    Flag_trkPOG_manystripclus53X = metFilterBits->accept(i);
+  //  else if(strcmp(metNames.triggerName(i).c_str(), "Flag_eeBadScFilter") == 0)
+  //    Flag_eeBadScFilter = metFilterBits->accept(i);
+  //  else if(strcmp(metNames.triggerName(i).c_str(), "Flag_METFilters") == 0)
+  //    Flag_METFilters = metFilterBits->accept(i);
+    // else if(strcmp(metNames.triggerName(i).c_str(), "Flag_HBHENoiseFilter") == 0)                                                                    
+    //   Flag_HBHENoiseFilter = metFilterBits->accept(i);                                                                                               
+  //  else if(strcmp(metNames.triggerName(i).c_str(), "Flag_trkPOG_toomanystripclus53X") == 0)
+  //    Flag_trkPOG_toomanystripclus53X = metFilterBits->accept(i);
+  //  else if(strcmp(metNames.triggerName(i).c_str(), "Flag_hcalLaserEventFilter") == 0)
+  //    Flag_hcalLaserEventFilter = metFilterBits->accept(i);
+  //}
+
+  //use custom hbhefilter, because miniAOD filters are problematic.                                                                                     
+  //Flag_HBHENoiseFilter = *hbheNoiseFilter;
+
+  return true;
+}
+
+bool RazorTuplizer::fillTrigger(const edm::Event& iEvent){
+  //fill trigger information                                                                                                                                                        
+
+  const edm::TriggerNames &names = iEvent.triggerNames(*triggerBits);  
+  //********************************************************************                                                                                                            
+  // Save trigger decisions in array of booleans                                                                                                                                    
+  //********************************************************************                                                                                                            
+  for (unsigned int i = 0, n = triggerBits->size(); i < n; ++i) {
+    string hltPathNameReq = "HLT_";
+
+    if ((names.triggerName(i)).find(hltPathNameReq) == string::npos) continue;
+    if ((names.triggerName(i)).find_last_of("_") == string::npos) continue;
+    int lastUnderscorePos = (names.triggerName(i)).find_last_of("_");
+    string hltPathNameWithoutVersionNumber = (names.triggerName(i)).substr(0,lastUnderscorePos);
+
+    for (unsigned int j = 0; j < NTriggersMAX; ++j) {
+      if (triggerPathNames[j] == "") continue;
+      if (hltPathNameWithoutVersionNumber == triggerPathNames[j]) {
+        triggerDecision[j] = triggerBits->accept(i);
+        triggerHLTPrescale[j] = 0;//triggerPrescales->getPrescaleForIndex(i);
+      }
+    }
+  }
+
+  return true;
+}
+
+
 bool RazorTuplizer::fillMC(){
 
   for(const reco::GenJet &j : *genJets){
@@ -978,9 +1566,12 @@ void RazorTuplizer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSe
     fillEventInfo(iEvent) 
     && fillMuons()
     && fillElectrons()
+    && fillTaus()
+    && fillIsoPFCandidates()
     && fillPhotons(iEvent,iSetup)
     && fillJets()
-    && fillJetsAK8();
+    && fillJetsAK8()
+    && fillMet(iEvent);
 
   bool isGoodMCEvent = true;
   if (useGen_) {
@@ -989,6 +1580,7 @@ void RazorTuplizer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSe
       && fillGenParticles();
   }
   isGoodEvent = isGoodEvent&&isGoodMCEvent;
+  if (enableTriggerInfo_) isGoodEvent = (isGoodEvent && fillTrigger(iEvent));
 
   //fill the tree if the event wasn't rejected                                                                                                      
   if(isGoodEvent) RazorEvents->Fill();
